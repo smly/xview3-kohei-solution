@@ -5,7 +5,7 @@ from pathlib import Path
 
 import cv2
 import torch
-import wandb
+# import wandb
 from omegaconf import OmegaConf
 from segmentation_models_pytorch.losses import DiceLoss, JaccardLoss
 import torch.nn as nn
@@ -149,7 +149,8 @@ def train(epoch, model, dataloaders, optimizer, scheduler):
         trn_metrics_count["fp"],
         trn_metrics_count["fn"],
     )
-    wandb.log(
+    # wandb.log(
+    print(
         {
             "epoch": epoch,
             "trn_loss": trn_metrics["loss"].avg,
@@ -226,7 +227,8 @@ def validate(epoch, model, dataloaders):
         val_metrics["fn"],
     )
 
-    wandb.log(
+    # wandb.log(
+    print(
         {
             "epoch": epoch,
             "val_precision": prec,
@@ -271,22 +273,17 @@ def custom_optimizer(model, model_init_lr=1e-5):
 
 def main(args: argparse.Namespace):
     conf = load_config(args.configs)
-    wandb.init(
-        project="xview3",
-        tags=[f"fold{args.fold}", "detector"],
-        config=OmegaConf.to_object(conf),
-    )  # noqa
+    # wandb.init(
+    #     project="xview3",
+    #     tags=[f"fold{args.fold}", "detector"],
+    #     config=OmegaConf.to_object(conf),
+    # )  # noqa
     logger.info("Config file: " + args.configs + "\n" + OmegaConf.to_yaml(conf))  # noqa
 
     dataloaders = get_dataloaders(args, conf)
 
     model = dynamic_load(conf.train.model.fqdn)(**conf.train.model.kwargs)
     model = model.to("cuda")
-
-    # Cluster model
-    if conf.dataset.fqdn.startswith("xd.xview3.localization.dataset.PPV2VO_C"):
-        assert Path(conf.train.model.pretrained).exists()
-        model.load_state_dict(torch.load(conf.train.model.pretrained))
 
     if conf.train.optimizer.fqdn.startswith("torch.optim"):
         optimizer = dynamic_load(conf.train.optimizer.fqdn)(

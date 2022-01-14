@@ -22,7 +22,7 @@ $ ls data/input/xview3/downloaded
 # Setup: Create the virtual env
 $ poetry ocnfig virtualenvs.in-project true
 $ poetry install
-$ poetry run pip install albumentations timm torch==1.10.0+cu113 torchvision==0.11.1+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html
+$ poetry run pip install albumentations timm segmentation_models_pytorch torch==1.10.0+cu113 torchvision==0.11.1+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html
 ```
 
 #### Training
