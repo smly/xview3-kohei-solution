@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "xd"
+version = "0.1.0"
+description = ""
+authors = ["smly <smly@users.noreply.github.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+omegaconf = "^2.1.0"
+openmim = "^0.1.2"
+pytest = "^6.2.4"
+rasterio = "^1.2.6"
+easydict = "^1.9"
+wandb = "^0.12.1"
+opencv-python = "^4.5.5"
+
+[tool.poetry.dev-dependencies]
+mypy = "^0.910"
+flake8 = "^3.9.2"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
