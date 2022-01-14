@@ -20,6 +20,8 @@ logger = getLogger("xd")
 
 @dataclass
 class XView3DataSource:
+    # Given files by the competition host.
+    trainval_input_dir: Path = Path("data/input/xview3/downloaded")
     train_csv: Path = Path("data/input/xview3/train.csv")
     validation_csv: Path = Path("data/input/xview3/validation.csv")
 
@@ -234,7 +236,6 @@ def preprocess_validation_masks_v2():
         print(" => Skip: output validation_masks/ is already exists.")
         return
 
-    assert False
     Path(mask_dir).mkdir(parents=True, exist_ok=True)
 
     for image_path in list(sorted(Path(image_dir).glob("*.png"))):
@@ -397,15 +398,15 @@ def preprocess_vh_vv_bathymetry_v2():
         crop_size=800,
     )
 
-    # Cropped images
-    print("# (3) Generating preprocess_vh_vv_bathymetry_v2/train/*")
-    print("# (4) Generating preprocess_vh_vv_bathymetry_v2/train.csv")
-    _internal_preprocess_v2(
-        data_source.train_csv,
-        preprocessed_info.train_csv,
-        preprocessed_info.train_image_dir,
-        crop_size=800,
-    )
+    # # Cropped images
+    # print("# (3) Generating preprocess_vh_vv_bathymetry_v2/train/*")
+    # print("# (4) Generating preprocess_vh_vv_bathymetry_v2/train.csv")
+    # _internal_preprocess_v2(
+    #     data_source.train_csv,
+    #     preprocessed_info.train_csv,
+    #     preprocessed_info.train_image_dir,
+    #     crop_size=800,
+    # )
 
 
 def preproc_v2():
@@ -528,6 +529,10 @@ def processing_ppv6(scene_ids,
                     setname: str):
     out_prefix = "data/working/xview3/images/ppv6"
     out_dir = Path(f"{out_prefix}/{setname}/")
+    if out_dir.exists():
+        print(" => Skip: The output image directory is already exists.")
+        return
+
     out_dir.mkdir(parents=True, exist_ok=True)
     thumb_out_dir = Path(f"{out_prefix}/thumb_{setname}/")
     thumb_out_dir.mkdir(parents=True, exist_ok=True)
@@ -550,6 +555,7 @@ def processing_ppv6(scene_ids,
 
 def preproc_v6():
     datainfo = XView3DataSource()
+    print("# (6) Generating images/ppv6/validation/*")
     processing_ppv6(validation_scene_ids(),
                     datainfo.trainval_input_dir,
                     "validation")

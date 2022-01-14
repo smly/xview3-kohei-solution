@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # Preprocessing
-# - data/working/xview3/preprocess_vh_vv_bathymetry_v2
-# - data/working/xview3/images/ppv6
-poetry run python scripts/preproc.py || (echo "> Error in scripts/preproc.py"; exit 1)
+# - data/working/xview3/preprocess_vh_vv_bathymetry_v2/validation/
+# - data/working/xview3/images/ppv6/validation/
+# - data/working/xview3/images/ppv6/thumb_validation/
+PYTHONPATH=. poetry run python scripts/preproc.py || (echo "> Error in scripts/preproc.py"; exit 1)
 
 # Build instance segmentation models (configs/localization/v13)
 # - PPV2VO
