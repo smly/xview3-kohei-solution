@@ -42,7 +42,6 @@ done
 
 echo " ******************** Training (regression model)"
 # Build regression models (configs/length_estimation/v16)
-# - PPV2ShipCropTrainValDataset, PPV2ShipCropInferenceDataset
 PYTHONPATH=. poetry run python -m xd.xview3.vessel_length.trainer \
     -c configs/vessel_length/v16_reg_ppv2_sz128.yml \
     -f 0
