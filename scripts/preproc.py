@@ -11,19 +11,12 @@ import rasterio
 import tqdm
 from rasterio.enums import Resampling
 
+from xd.xview3.localization.dataset.ppv2 import XView3DataSource
 from xd.utils.timer import timer
 from xd.utils.logger import set_logger
 
 
 logger = getLogger("xd")
-
-
-@dataclass
-class XView3DataSource:
-    # Given files by the competition host.
-    trainval_input_dir: Path = Path("data/input/xview3/downloaded")
-    train_csv: Path = Path("data/input/xview3/train.csv")
-    validation_csv: Path = Path("data/input/xview3/validation.csv")
 
 
 @dataclass
@@ -399,8 +392,8 @@ def preprocess_vh_vv_bathymetry_v2():
     )
 
     # # Cropped images
-    # print("# (3) Generating preprocess_vh_vv_bathymetry_v2/train/*")
-    # print("# (4) Generating preprocess_vh_vv_bathymetry_v2/train.csv")
+    # print("# Generating preprocess_vh_vv_bathymetry_v2/train/*")
+    # print("# Generating preprocess_vh_vv_bathymetry_v2/train.csv")
     # _internal_preprocess_v2(
     #     data_source.train_csv,
     #     preprocessed_info.train_csv,
@@ -414,7 +407,7 @@ def preproc_v2():
     preprocess_vh_vv_bathymetry_v2()
 
     # Preprocess masks
-    print("# (5) Generating preprocess_vh_vv_bathymetry_v2/validation_masks/*")
+    print("# (3) Generating preprocess_vh_vv_bathymetry_v2/validation_masks/*")
     preprocess_validation_masks_v2()
 
 
@@ -555,7 +548,7 @@ def processing_ppv6(scene_ids,
 
 def preproc_v6():
     datainfo = XView3DataSource()
-    print("# (6) Generating images/ppv6/validation/*")
+    print("# (4) Generating images/ppv6/validation/*")
     processing_ppv6(validation_scene_ids(),
                     datainfo.trainval_input_dir,
                     "validation")

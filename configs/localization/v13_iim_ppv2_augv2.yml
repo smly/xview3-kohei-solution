@@ -1,0 +1,42 @@
+apis: null
+
+dataset:
+  # fqdn: xd.data.xview3.dataset.XView3CrowdLocatorValidationOnlyV2Dataset
+  fqdn: xd.xview3.localization.dataset.PPV2VO
+  scene_fqdn: xd.xview3.localization.dataset.PPV2InferenceDataset
+  kwargs: {}
+
+train:
+  working_basedir: data/working/xview3
+  augmentation:
+    func: xd.xview3.localization.augmentation.get_xview3_augv2
+    kwargs: {}
+
+  model:
+    fqdn: xd.xview3.localization.models.CrowdLocatorV2
+    kwargs:
+      backbone: hrnet
+      gpu_id: 0,1
+
+  total_epochs: 60
+  batch_size: 8
+  num_workers: 4
+
+  optimizer:
+    # fqdn: torch.optim.Adam
+    # kwargs:
+    #   lr: 0.000005 # 5e-6
+    #   weight_decay: 0.00001
+    fqdn: xd.xview3.localization.trainer.custom_optimizer
+    kwargs:
+      model_init_lr: 0.000005  # 5e-6
+
+  scheduler:
+    fqdn: torch.optim.lr_scheduler.CosineAnnealingLR
+    kwargs:
+      T_max: 1
+      eta_min: 0.00000005 # 5e-8
+
+test:
+  batch_size: 8
+  num_workers: 4

@@ -2,7 +2,7 @@
 
 ## Usage
 
-以下のパスにデータが保存されていることを想定している。
+This repository assumes that the given data set is stored in the following locations:
 
 ```
 $ ls data/input/xview3/*.csv
@@ -16,28 +16,33 @@ $ ls data/input/xview3/downloaded
 
 ### Training
 
+#### Setup
+
 ```
-## Setup: Create the virtual env -----
+# Setup: Create the virtual env
 $ poetry ocnfig virtualenvs.in-project true
 $ poetry install
 $ poetry run pip install albumentations timm torch==1.10.0+cu113 torchvision==0.11.1+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html
+```
 
-## Training -----
-# - To save storage space, my preprocessing code assumes that
-#   the input image file is the original file in .tar.gz format.
-#   It does NOT assume pre-extracted files.
+#### Training
+
+* To save storage space, my preprocessing code assumes that the input image file is the original file in .tar.gz format. It does NOT assume pre-extracted files.
+* The batch size and other settings are based on the assumption that two RTX3080 GPU cards are used.
+
+    ```
 $ bash train.sh
 ```
 
 ### Inference
+
+My containerized inference code follows the xView3 evaluation protocol. The detailed usage of the xview3 evaluation protocol is described in https://iuu.xview.us/verify.
 
 ```
 ## Setup: Build the docker image -----
 $ docker build --no-cache -t kohei-xview3 .
 
 ## Inference -----
-# - My containerized inference code follows the xView3 evaluation protocol.
-# - Detailed usage is described in https://iuu.xview.us/verify.
 $ docker run \
     --shm-size 16G \
     --gpus=1 \
