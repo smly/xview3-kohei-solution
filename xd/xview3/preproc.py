@@ -418,6 +418,13 @@ def validation_scene_ids():
     return scene_ids
 
 
+def train_scene_ids():
+    datainfo = XView3DataSource()
+    df = pd.read_csv(datainfo.train_csv)
+    scene_ids = list(sorted(df["scene_id"].unique()))
+    return scene_ids
+
+
 def _load_image_layers_v2(scene_id, base_dir="data/input/xview3/downloaded"):
     imgs = {}
     proc_imgs = {}
@@ -552,6 +559,10 @@ def preproc_v6():
     processing_ppv6(validation_scene_ids(),
                     datainfo.trainval_input_dir,
                     "validation")
+    print("# (5) Generating images/ppv6/train/*")
+    processing_ppv6(train_scene_ids(),
+                    datainfo.trainval_input_dir,
+                    "train")
 
 
 def main():

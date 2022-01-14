@@ -19,7 +19,7 @@ echo " ******************** Training (instance segmentation model)"
 PYTHONPATH=. poetry run python -m xd.xview3.localization.trainer \
     -c configs/localization/v13_iim_ppv2_augv2.yml \
     -f 0
-mkdir v13 && cp data/working/xview3/models/v13_iim_ppv2_augv2/fold0/ep59.pth v13/
+mkdir -p v13 && cp data/working/xview3/models/v13_iim_ppv2_augv2/fold0/ep59.pth v13/
 
 echo " ******************** Training (classification model)"
 # Build classification models (configs/vessel_class/v77)
