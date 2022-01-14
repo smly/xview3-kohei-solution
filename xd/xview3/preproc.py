@@ -565,12 +565,35 @@ def preproc_v6():
                     "train")
 
 
+def split_kfolds():
+    nfold = 10
+    np.random.seed(111)
+
+    datainfo = XView3PreprocessedV2()
+    if datainfo.validation_kfold_csv.exists():
+        return
+
+    df_val = pd.read_csv("data/input/xview3/validation.csv")
+    scene_ids = df_val["scene_id"].unique()
+    kfold_mapping = dict(zip(
+        scene_ids,
+        np.random.randint(0, nfold, len(scene_ids))))
+
+    df_val["fold_idx"] = df_val["scene_id"].map(kfold_mapping)
+
+    print(df_val)
+    assert False
+
+    df_val.to_csv(datainfo.validation_kfold_csv, index=False)
+
+
 def main():
     # Generate data/working/xview3/preprocess_vh_vv_bathymetry_v2/*
     preproc_v2()
-
     # Generate data/working/xview3/images/ppv6/*
     preproc_v6()
+    # Generate validation splits
+    split_kfolds()
 
 
 if __name__ == "__main__":
