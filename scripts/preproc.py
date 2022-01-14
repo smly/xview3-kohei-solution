@@ -2,6 +2,7 @@ import math
 import tarfile
 from dataclasses import dataclass
 from pathlib import Path
+from logging import getLogger
 
 import cv2
 import numpy as np
@@ -9,6 +10,12 @@ import pandas as pd
 import rasterio
 import tqdm
 from rasterio.enums import Resampling
+
+from xd.utils.timer import timer
+from xd.utils.logger import set_logger
+
+
+logger = getLogger("xd")
 
 
 @dataclass
@@ -410,8 +417,142 @@ def preproc_v2():
     preprocess_validation_masks_v2()
 
 
+def validation_scene_ids():
+    datainfo = XView3DataSource()
+    df = pd.read_csv(datainfo.validation_csv)
+    scene_ids = list(sorted(df["scene_id"].unique()))
+    return scene_ids
+
+
+def _load_image_layers_v2(scene_id, base_dir="data/input/xview3/downloaded"):
+    imgs = {}
+    proc_imgs = {}
+
+    channels = [
+        "VH_dB",
+        "VV_dB",
+        "bathymetry",
+        "owiMask",
+    ]
+
+    with tarfile.open(f"{base_dir}/{scene_id}.tar.gz", "r") as f:
+        for fl in channels:
+            print(f"Loading {scene_id}/{fl}...")
+            with rasterio.open(f.extractfile(f"{scene_id}/{fl}.tif"), "r") as dataset:
+                imgs[fl] = dataset.read(1)
+                if imgs[fl].shape != imgs[channels[0]].shape:
+                    imgs[fl] = dataset.read(
+                        out_shape=imgs[channels[0]].shape,
+                        resampling=Resampling.bilinear,
+                    ).squeeze()
+                assert imgs[fl].shape == imgs[channels[0]].shape
+
+    # mask
+    im_tmp = imgs["VH_dB"]
+    im_mask = np.where(im_tmp == -(2 ** 15), 0, 1)
+    proc_imgs["mask"] = im_mask
+
+    # see mask
+    im_tmp = imgs["owiMask"]
+    im_tmp = np.where(im_mask > 0, im_tmp == 0, 0)
+    proc_imgs["owiMask"] = (im_tmp * 255).astype(np.uint8)
+
+    # VH
+    im_tmp = imgs["VH_dB"]
+    # min_val, max_val = np.percentile(im_tmp[im_mask > 0].ravel(), 0.5), np.percentile(
+    #     im_tmp[im_mask > 0].ravel(), 99.5
+    # )
+    min_val, max_val = -36, -9
+
+    im_tmp = np.where(im_mask > 0, im_tmp, min_val)
+    im_tmp = np.clip(im_tmp, min_val, max_val)
+    im_tmp = (im_tmp - min_val) / (max_val - min_val)
+    im_tmp = (im_tmp * 255).astype(np.uint8)
+    proc_imgs["VH_dB"] = im_tmp
+
+    # VV
+    im_tmp = imgs["VV_dB"]
+    # min_val, max_val = np.percentile(im_tmp[im_mask > 0].ravel(), 0.5), np.percentile(
+    #     im_tmp[im_mask > 0].ravel(), 99.5
+    # )
+    min_val, max_val = -34, 1.3
+
+    im_tmp = np.where(im_mask > 0, im_tmp, min_val)
+    im_tmp = np.clip(im_tmp, min_val, max_val)
+    im_tmp = (im_tmp - min_val) / (max_val - min_val)
+    im_tmp = (im_tmp * 255).astype(np.uint8)
+    proc_imgs["VV_dB"] = im_tmp
+
+    # bathymetry
+    im_tmp = imgs["bathymetry"]
+    min_bathymetry, max_bathymetry = -255, 255
+    im_tmp = np.where(im_tmp < min_bathymetry, min_bathymetry, im_tmp)
+    im_tmp = np.where(im_tmp > max_bathymetry, max_bathymetry, im_tmp)
+    im_tmp = (im_tmp - min_bathymetry) / (max_bathymetry - min_bathymetry)
+    im_tmp = (im_tmp * 255).astype(np.uint8)
+    proc_imgs["bathymetry"] = im_tmp
+    return proc_imgs
+
+
+def load_image_ppv6(input_dir: Path, scene_id: str, crop_size: int = 800) -> np.ndarray:
+    with timer(f"Loading scene image ({scene_id}) from archive file."):
+        proc_imgs = _load_image_layers_v2(scene_id, base_dir=input_dir)
+
+    with timer("Stack layers."):
+        im = np.stack(
+            [
+                np.where(proc_imgs["mask"] > 0, proc_imgs["VV_dB"], 0),
+                np.where(proc_imgs["mask"] > 0, proc_imgs["VH_dB"], 0),
+                np.where(proc_imgs["mask"] > 0, proc_imgs["bathymetry"], 0),
+            ],
+            axis=2,
+        )
+        im_pad = np.stack(
+            [
+                _pad(im[..., 0], crop_size, crop_size)[0],
+                _pad(im[..., 1], crop_size, crop_size)[0],
+                _pad(im[..., 2], crop_size, crop_size)[0],
+            ],
+            axis=2,
+        )
+
+    return im_pad
+
+
+def get_scale(shape, max_size):
+    return max_size / max(shape[:2])
+
+
+def processing_ppv6(scene_ids,
+                    input_dir: Path,
+                    setname: str):
+    out_prefix = "data/working/xview3/images/ppv6"
+    out_dir = Path(f"{out_prefix}/{setname}/")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    thumb_out_dir = Path(f"{out_prefix}/thumb_{setname}/")
+    thumb_out_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Total num of scene_ids: {len(scene_ids)}")
+    for scene_id in tqdm.tqdm(scene_ids, total=len(scene_ids)):
+        with timer(f"Load scene_image: {scene_id}", logger=logger):
+            im_pad = load_image_ppv6(input_dir, scene_id)
+            im_pad = cv2.cvtColor(im_pad, cv2.COLOR_BGR2RGB)
+            cv2.imwrite(str(out_dir / f"{scene_id}.png"),
+                        im_pad,
+                        [cv2.IMWRITE_PNG_COMPRESSION, 1])
+            scale = get_scale(im_pad.shape, 1080)
+            h = int(im_pad.shape[0] * scale)
+            w = int(im_pad.shape[1] * scale)
+            im_pad = cv2.resize(im_pad, (w, h))
+            cv2.imwrite(str(thumb_out_dir / f"{scene_id}.png"),
+                        im_pad,
+                        [cv2.IMWRITE_PNG_COMPRESSION, 1])
+
+
 def preproc_v6():
-    pass
+    datainfo = XView3DataSource()
+    processing_ppv6(validation_scene_ids(),
+                    datainfo.trainval_input_dir,
+                    "validation")
 
 
 def main():
@@ -423,4 +564,5 @@ def main():
 
 
 if __name__ == "__main__":
+    set_logger(logger)
     main()
