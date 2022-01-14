@@ -121,6 +121,10 @@ def load_image_v2(scene_id, base_dir="data/input/xview3/downloaded"):
 
 
 def _internal_preprocess_v2(orig_csv, out_csv, out_image_dir, crop_size=800):
+    if out_csv.exists():
+        print(" => Skip: output csv is already exists.")
+        return
+
     df = pd.read_csv(orig_csv)
     df_chip_list = []
     for scene_id in df["scene_id"].unique():
@@ -139,15 +143,16 @@ def _internal_preprocess_v2(orig_csv, out_csv, out_image_dir, crop_size=800):
         )
         df_chip_list.append(df_chip)
 
-    print(df)
-    assert False
-
     df = pd.concat(df_chip_list, sort=False)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out_csv, index=False)
 
     scene_ids = df["scene_id"].unique()
     for scene_id in tqdm.tqdm(scene_ids):
+        if len(list(out_image_dir.glob(f"{scene_id}_*.png"))) > 0:
+            # Skip
+            continue
+
         proc_imgs = load_image_v2(scene_id)
         im = np.stack(
             [
@@ -201,10 +206,183 @@ def _internal_preprocess_v2(orig_csv, out_csv, out_image_dir, crop_size=800):
                                 [cv2.IMWRITE_PNG_COMPRESSION, 1])
 
 
+def euclidean_dist(test_matrix, train_matrix):
+    num_test = test_matrix.shape[0]
+    num_train = train_matrix.shape[0]
+    dists = np.zeros((num_test, num_train))
+    d1 = -2 * np.dot(test_matrix, train_matrix.T)
+    d2 = np.sum(np.square(test_matrix), axis=1, keepdims=True)
+    d3 = np.sum(np.square(train_matrix), axis=1)
+    dists = np.sqrt(d1 + d2 + d3)
+    return dists
+
+
+def preprocess_validation_masks_v2():
+    df_val = pd.read_csv(
+        "data/working/xview3/preprocess_vh_vv_bathymetry_v2/validation.csv"
+    )
+    image_dir = "data/working/xview3/preprocess_vh_vv_bathymetry_v2/validation/"
+    mask_dir = "data/working/xview3/preprocess_vh_vv_bathymetry_v2/validation_masks/"
+    if Path(mask_dir).exists():
+        print(" => Skip: output validation_masks/ is already exists.")
+        return
+
+    assert False
+    Path(mask_dir).mkdir(parents=True, exist_ok=True)
+
+    for image_path in list(sorted(Path(image_dir).glob("*.png"))):
+        id_, yidx, xidx = image_path.stem.split("_")
+        yidx, xidx = int(yidx), int(xidx)
+        df_part = df_val[
+            (df_val["scene_id"] == id_)
+            & (df_val["chip_yidx"] == yidx)
+            & (df_val["chip_xidx"] == xidx)
+        ]
+
+        if (Path(mask_dir) / Path(image_path).name).exists():
+            continue
+
+        im = cv2.imread(str(image_path))
+        mask_map = np.zeros(im.shape, dtype=np.uint8)
+
+        ImgInfo = {
+            "img_id": id_,
+            "human_num": len(df_part),
+        }
+        h, w = im.shape[:2]
+
+        centroid_list = []
+        wh_list = []
+        for _, r in df_part.iterrows():
+            yc, xc = r["chip_ship_y"], r["chip_ship_x"]
+            y0, x0, y1, x1 = int(yc - 2), int(xc - 2), int(yc + 2), int(xc + 2)
+            # 中心点
+            centroid_list.append([xc, yc])
+            # width and height (最低でも 3)
+            wh_list.append([max((x1 - x0) / 2, 3), max((y1 - y0) / 2, 3)])
+
+        centroids = np.array(centroid_list.copy(), dtype="int")
+        wh = np.array(wh_list.copy(), dtype="int")
+        # print(centroids, wh)
+
+        # 幅、高さどちらも 25 以上の場合は 25 に固定する（最大サイズの固定）
+        wh[wh > 25] = 25
+        human_num = ImgInfo["human_num"]
+        for point in centroids:
+            point = point[None, :]
+
+            # 中心からの距離
+            dists = euclidean_dist(point, centroids)
+            dists = dists.squeeze()
+            ids = np.argsort(dists)
+
+            for start, first in enumerate(ids, 0):
+                if start > 0 and start < 5:
+                    src_point = point.squeeze()
+                    dst_point = centroids[first]
+
+                    src_w, src_h = wh[ids[0]][0], wh[ids[0]][1]
+                    dst_w, dst_h = wh[first][0], wh[first][1]
+
+                    count = 0
+                    if (src_w + dst_w) - np.abs(src_point[0] - dst_point[0]) > 0 and (
+                        src_h + dst_h
+                    ) - np.abs(src_point[1] - dst_point[1]) > 0:
+                        w_reduce = (
+                            (src_w + dst_w) - np.abs(src_point[0] - dst_point[0])
+                        ) / 2
+                        h_reduce = (
+                            (src_h + dst_h) - np.abs(src_point[1] - dst_point[1])
+                        ) / 2
+                        threshold_w, threshold_h = max(
+                            -int(max(src_w - w_reduce, dst_w - w_reduce) / 2.0), -60
+                        ), max(-int(max(src_h - h_reduce, dst_h - h_reduce) / 2.0), -60)
+
+                    else:
+                        threshold_w, threshold_h = max(
+                            -int(max(src_w, dst_w) / 2.0), -60
+                        ), max(-int(max(src_h, dst_h) / 2.0), -60)
+                    # threshold_w, threshold_h = -5, -5
+                    while (src_w + dst_w) - np.abs(
+                        src_point[0] - dst_point[0]
+                    ) > threshold_w and (src_h + dst_h) - np.abs(
+                        src_point[1] - dst_point[1]
+                    ) > threshold_h:
+
+                        if (dst_w * dst_h) > (src_w * src_h):
+                            wh[first][0] = max(int(wh[first][0] * 0.9), 2)
+                            wh[first][1] = max(int(wh[first][1] * 0.9), 2)
+                            dst_w, dst_h = wh[first][0], wh[first][1]
+                        else:
+                            wh[ids[0]][0] = max(int(wh[ids[0]][0] * 0.9), 2)
+                            wh[ids[0]][1] = max(int(wh[ids[0]][1] * 0.9), 2)
+                            src_w, src_h = wh[ids[0]][0], wh[ids[0]][1]
+
+                        if human_num > 3:
+                            # print(human_num, centroids.shape, ids.shape, start)
+                            dst_point_ = centroids[ids[start + 1]]
+                            dst_w_, dst_h_ = (
+                                wh[ids[start + 1]][0],
+                                wh[ids[start + 1]][1],
+                            )
+                            if (dst_w_ * dst_h_) > (src_w * src_h) and (
+                                dst_w_ * dst_h_
+                            ) > (dst_w * dst_h):
+                                if (src_w + dst_w_) - np.abs(
+                                    src_point[0] - dst_point_[0]
+                                ) > -3 and (src_h + dst_h_) - np.abs(
+                                    src_point[1] - dst_point_[1]
+                                ) > -3:
+                                    wh[ids[start + 1]][0] = max(
+                                        int(wh[ids[start + 1]][0] * 0.9), 2
+                                    )
+                                    wh[ids[start + 1]][1] = max(
+                                        int(wh[ids[start + 1]][1] * 0.9), 2
+                                    )
+
+                        count += 1
+                        if count > 40:
+                            break
+
+        for (center_w, center_h), (width, height) in zip(centroids, wh):
+            assert width > 0 and height > 0
+
+            if (0 < center_w < w) and (0 < center_h < h):
+                h_start = center_h - height
+                h_end = center_h + height
+
+                w_start = center_w - width
+                w_end = center_w + width
+                #
+                if h_start < 0:
+                    h_start = 0
+
+                if h_end > h:
+                    h_end = h
+
+                if w_start < 0:
+                    w_start = 0
+
+                if w_end > w:
+                    w_end = w
+
+                mask_map[h_start:h_end, w_start:w_end] = 1
+
+        mask_map = mask_map * 255
+        cv2.imwrite(
+            str(Path(mask_dir) / Path(image_path).name),
+            mask_map,
+            [cv2.IMWRITE_PNG_COMPRESSION, 1],
+        )
+
+
 def preprocess_vh_vv_bathymetry_v2():
     data_source = XView3DataSource()
     preprocessed_info = XView3PreprocessedV2()
 
+    # Cropped images
+    print("# (1) Generating preprocess_vh_vv_bathymetry_v2/validation/*")
+    print("# (2) Generating preprocess_vh_vv_bathymetry_v2/validation.csv")
     _internal_preprocess_v2(
         data_source.validation_csv,
         preprocessed_info.validation_csv,
@@ -212,6 +390,9 @@ def preprocess_vh_vv_bathymetry_v2():
         crop_size=800,
     )
 
+    # Cropped images
+    print("# (3) Generating preprocess_vh_vv_bathymetry_v2/train/*")
+    print("# (4) Generating preprocess_vh_vv_bathymetry_v2/train.csv")
     _internal_preprocess_v2(
         data_source.train_csv,
         preprocessed_info.train_csv,
@@ -221,7 +402,12 @@ def preprocess_vh_vv_bathymetry_v2():
 
 
 def preproc_v2():
+    # Preprocess images
     preprocess_vh_vv_bathymetry_v2()
+
+    # Preprocess masks
+    print("# (5) Generating preprocess_vh_vv_bathymetry_v2/validation_masks/*")
+    preprocess_validation_masks_v2()
 
 
 def preproc_v6():

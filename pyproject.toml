@@ -13,6 +13,7 @@ rasterio = "^1.2.6"
 easydict = "^1.9"
 wandb = "^0.12.1"
 opencv-python = "^4.5.5"
+tqdm = "^4.62.3"
 
 [tool.poetry.dev-dependencies]
 mypy = "^0.910"
