@@ -2,9 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Function
-import segmentation_models_pytorch as smp
 
-from xd.xview3.localization.models_swin import get_swin_fpn
 from xd.xview3.localization.models_hrnet import get_seg_model
 
 
@@ -93,10 +91,8 @@ class CrowdLocator(nn.Module):
 
         if net_name == "hrnet":
             self.extractor = get_seg_model(net_name)
-        elif net_name == "swin-b":
-            self.extractor = get_swin_fpn(name="swin-b")
-        elif net_name == "swin-l":
-            self.extractor = get_swin_fpn(name="swin-l")
+        else:
+            assert False
 
         self.binar = BinarizedModule(input_channels=binar_input_channels)
 
@@ -127,69 +123,3 @@ class CrowdLocator(nn.Module):
 class CrowdLocatorV2(CrowdLocator):
     def __init__(self, backbone="hrnet", gpu_id="0,1", binar_input_channels=720):
         super(CrowdLocatorV2, self).__init__(backbone, gpu_id, binar_input_channels)
-
-
-class UnetWithFeatures(smp.Unet):
-    def forward(self, x):
-        features = self.encoder(x)
-        decoder_output = self.decoder(*features)
-
-        masks = self.segmentation_head(decoder_output)
-
-        if self.classification_head is not None:
-            labels = self.classification_head(features[-1])
-            return masks, labels
-
-        x0_h, x0_w = features[2].size(2), features[2].size(3)
-        x1 = F.interpolate(features[3], scale_factor=2)
-        x2 = F.interpolate(features[4], scale_factor=4)
-        x3 = F.interpolate(features[5], scale_factor=8)
-        f = torch.cat([features[2], x1, x2, x3], 1)
-        return f, masks
-
-
-class CrowdLocatorV3(nn.Module):
-    def __init__(self,
-                 encoder_name="timm-resnest101e",
-                 in_channels=3,
-                 classes=1,
-                 binar_input_channels=3840,
-                 gpu_id="0,1"):
-        super(CrowdLocatorV3, self).__init__()
-
-        self.extractor = UnetWithFeatures(
-            encoder_name=encoder_name,
-            encoder_weights="imagenet",
-            in_channels=in_channels,
-            classes=classes,
-            activation="sigmoid",
-        )
-        self.binar = BinarizedModule(input_channels=binar_input_channels)
-
-        if len(gpu_id) > 1:
-            self.extractor = torch.nn.DataParallel(self.extractor).cuda()
-            self.binar = torch.nn.DataParallel(self.binar).cuda()
-        else:
-            self.extractor = self.extractor.cuda()
-            self.binar = self.binar.cuda()
-
-    @property
-    def loss(self):
-        return self.head_map_loss, self.binar_map_loss
-
-    def forward(self, img, mask_gt, mode="train"):
-        # print(size_map_gt.max())
-        feature, pre_map = self.extractor(img)
-        threshold_matrix, binar_map = self.binar(feature, pre_map)
-
-        if mode == "train":
-            assert pre_map.size(2) == mask_gt.size(2)
-            self.binar_map_loss = (torch.abs(binar_map - mask_gt)).mean()
-            self.head_map_loss = F.mse_loss(pre_map, mask_gt)
-
-        return threshold_matrix, pre_map, binar_map
-
-
-if __name__ == "__main__":
-    model = CrowdLocator("hrnet", "0,1")
-    print(model)
